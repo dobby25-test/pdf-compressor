@@ -17,7 +17,42 @@ function loadJsZip() {
   return jszipModulePromise;
 }
 
+export function preloadCompressionFor(category) {
+  if (category === "pdf") {
+    loadPdfLib();
+  }
+  if (category === "zip") {
+    loadJsZip();
+  }
+}
+
 export async function compressImage(file, quality, outputFormat) {
+  const mime = FORMAT_MAP[outputFormat] || "image/jpeg";
+
+  // Fast path: avoids base64 conversion and is significantly faster for large images.
+  if ("createImageBitmap" in window) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+
+      if (mime === "image/jpeg") {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      ctx.drawImage(bitmap, 0, 0);
+
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob || file), mime, quality / 100);
+      });
+    } finally {
+      bitmap.close();
+    }
+  }
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -26,9 +61,7 @@ export async function compressImage(file, quality, outputFormat) {
         const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-
         const ctx = canvas.getContext("2d");
-        const mime = FORMAT_MAP[outputFormat] || "image/jpeg";
 
         if (mime === "image/jpeg") {
           ctx.fillStyle = "#fff";

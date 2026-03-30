@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { compressDocument, compressImage, compressPDF, createZipBlob } from "../utils/compression";
+import { compressDocument, compressImage, compressPDF, createZipBlob, preloadCompressionFor } from "../utils/compression";
 import { getFileCategory } from "../utils/file";
 import { getOutputExt } from "../utils/format";
 
 function createItem(file) {
+  const category = getFileCategory(file);
   return {
     id: Math.random().toString(36).slice(2),
     file,
-    category: getFileCategory(file),
+    category,
     compressed: null,
     compressing: false,
-    preview: null,
+    preview: category === "image" ? URL.createObjectURL(file) : null,
     status: "idle",
     progress: 0,
     error: null,
@@ -44,17 +45,21 @@ export function useCompressionQueue(settings, addToast) {
     settingsRef.current = settings;
   }, [settings]);
 
-  const processQueue = useCallback(async () => {
-    if (processingRef.current) return;
-    processingRef.current = true;
+  useEffect(() => {
+    return () => {
+      // Release blob URLs to keep memory usage stable during long sessions.
+      itemsRef.current.forEach((item) => {
+        if (item.preview) URL.revokeObjectURL(item.preview);
+      });
+    };
+  }, []);
 
-    while (queueRef.current.length) {
-      const id = queueRef.current.shift();
+  const runSingleCompression = useCallback(
+    async (id) => {
       const current = itemsRef.current.find((i) => i.id === id);
-      if (!current) continue;
+      if (!current) return;
 
       let timer;
-
       setItems((prev) =>
         prev.map((i) =>
           i.id === id
@@ -74,7 +79,7 @@ export function useCompressionQueue(settings, addToast) {
         }, 180);
 
         const activeItem = itemsRef.current.find((i) => i.id === id);
-        if (!activeItem) continue;
+        if (!activeItem) return;
 
         const quality = settingsRef.current.quality;
         const outputFmt = settingsRef.current.imageFormat;
@@ -134,10 +139,36 @@ export function useCompressionQueue(settings, addToast) {
       } finally {
         if (timer) window.clearInterval(timer);
       }
-    }
+    },
+    [addToast],
+  );
+
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+
+    const workerCount = Math.max(
+      1,
+      Math.min(3, typeof navigator !== "undefined" && navigator.hardwareConcurrency ? Math.floor(navigator.hardwareConcurrency / 2) : 2),
+    );
+
+    const worker = async () => {
+      while (queueRef.current.length) {
+        const id = queueRef.current.shift();
+        if (!id) break;
+        await runSingleCompression(id);
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
     processingRef.current = false;
-  }, [addToast]);
+
+    // Handle race where new items were queued while workers were finishing.
+    if (queueRef.current.length) {
+      processQueue();
+    }
+  }, [runSingleCompression]);
 
   const enqueueItems = useCallback(
     (ids) => {
@@ -173,16 +204,6 @@ export function useCompressionQueue(settings, addToast) {
 
       const newItems = valid.map(createItem);
 
-      newItems.forEach((item) => {
-        if (item.category === "image") {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, preview: e.target.result } : i)));
-          };
-          reader.readAsDataURL(item.file);
-        }
-      });
-
       setItems((prev) => [...prev, ...newItems]);
       addToast(`Added ${newItems.length} file${newItems.length > 1 ? "s" : ""}.`, "success");
     },
@@ -191,7 +212,11 @@ export function useCompressionQueue(settings, addToast) {
 
   const removeItem = useCallback((id) => {
     queueRef.current = queueRef.current.filter((qId) => qId !== id);
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setItems((prev) => {
+      const target = prev.find((i) => i.id === id);
+      if (target?.preview) URL.revokeObjectURL(target.preview);
+      return prev.filter((i) => i.id !== id);
+    });
   }, []);
 
   const onItemAction = useCallback(
@@ -223,6 +248,8 @@ export function useCompressionQueue(settings, addToast) {
       return;
     }
 
+    const hasPdf = items.some((i) => i.status !== "queued" && i.status !== "compressing" && i.category === "pdf");
+    if (hasPdf) preloadCompressionFor("pdf");
     enqueueItems(eligibleIds);
     addToast(`Queued ${eligibleIds.length} file${eligibleIds.length > 1 ? "s" : ""}.`, "success");
   }, [addToast, enqueueItems, items]);
@@ -245,6 +272,7 @@ export function useCompressionQueue(settings, addToast) {
       return;
     }
 
+    preloadCompressionFor("zip");
     const zipInputs = done.map((item) => {
       const ext = item.outputExt || getOutputExt(settings.imageFormat, item.category, item.file.name);
       const name = item.file.name.replace(/\.[^.]+$/, "") + "_compressed." + ext;
@@ -258,7 +286,12 @@ export function useCompressionQueue(settings, addToast) {
 
   const clearAll = useCallback(() => {
     queueRef.current = [];
-    setItems([]);
+    setItems((prev) => {
+      prev.forEach((item) => {
+        if (item.preview) URL.revokeObjectURL(item.preview);
+      });
+      return [];
+    });
     addToast("Cleared all files.", "info");
   }, [addToast]);
 
