@@ -31,25 +31,30 @@ export async function compressImage(file, quality, outputFormat) {
 
   // Fast path: avoids base64 conversion and is significantly faster for large images.
   if ("createImageBitmap" in window) {
-    const bitmap = await createImageBitmap(file);
     try {
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext("2d");
+      const bitmap = await createImageBitmap(file);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
 
-      if (mime === "image/jpeg") {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (mime === "image/jpeg") {
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        ctx.drawImage(bitmap, 0, 0);
+
+        return new Promise((resolve) => {
+          canvas.toBlob((blob) => resolve(blob || file), mime, quality / 100);
+        });
+      } finally {
+        bitmap.close();
       }
-
-      ctx.drawImage(bitmap, 0, 0);
-
-      return new Promise((resolve) => {
-        canvas.toBlob((blob) => resolve(blob || file), mime, quality / 100);
-      });
-    } finally {
-      bitmap.close();
+    } catch {
+      // Some browsers expose createImageBitmap but fail for specific files.
+      // Fall through to FileReader+Image path for compatibility.
     }
   }
 

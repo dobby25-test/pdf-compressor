@@ -174,22 +174,31 @@ export function useCompressionQueue(settings, addToast) {
     (ids) => {
       if (!ids.length) return;
 
-      const idSet = new Set(ids);
-      const queueAdditions = [];
+      // Compute queue additions synchronously from refs to avoid stale/async setState races.
+      const requested = new Set(ids);
+      const alreadyQueued = new Set(queueRef.current);
+      const allowed = new Set();
+
+      for (const item of itemsRef.current) {
+        if (!requested.has(item.id)) continue;
+        if (item.status === "compressing" || item.status === "queued") continue;
+        if (alreadyQueued.has(item.id)) continue;
+        allowed.add(item.id);
+      }
+
+      if (!allowed.size) return;
+
+      queueRef.current = [...queueRef.current, ...allowed];
 
       setItems((prev) =>
-        prev.map((i) => {
-          if (!idSet.has(i.id)) return i;
-          if (i.status === "compressing" || i.status === "queued") return i;
-          queueAdditions.push(i.id);
-          return { ...i, status: "queued", progress: 0, error: null, cancelRequested: false };
-        }),
+        prev.map((i) =>
+          allowed.has(i.id)
+            ? { ...i, status: "queued", progress: 0, error: null, cancelRequested: false }
+            : i,
+        ),
       );
 
-      if (queueAdditions.length) {
-        queueRef.current = [...new Set([...queueRef.current, ...queueAdditions])];
-        processQueue();
-      }
+      processQueue();
     },
     [processQueue],
   );
