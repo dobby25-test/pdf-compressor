@@ -99,6 +99,38 @@ export default function App() {
           </>
         )}
 
+        <section style={{ marginTop: 36, background: "#0f0f0f", border: "1px solid #1c1c1c", borderRadius: 16, padding: "18px 18px 8px" }}>
+          <h2 style={{ margin: "0 0 10px", fontSize: 20, color: "#efefef" }}>Free online file compressor</h2>
+          <p style={{ margin: "0 0 14px", fontSize: 14, color: "#8b8b8b", lineHeight: 1.6 }}>
+            Compress image, PDF and Office files directly in your browser. Upload files, choose quality, and download compressed output in seconds.
+          </p>
+
+          <div style={{ marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "#dcdcdc" }}>Supported formats</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "#7e7e7e", lineHeight: 1.6 }}>
+              Images: JPG/JPEG, PNG, WebP | Documents: PDF, DOCX, PPTX, XLSX
+            </p>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "#dcdcdc" }}>FAQ</h3>
+            <details style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "#cfcfcf" }}>Is this compressor free?</summary>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#7e7e7e" }}>Yes. You can compress files without signup.</p>
+            </details>
+            <details style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "#cfcfcf" }}>Are my files uploaded to a server?</summary>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#7e7e7e" }}>No. Processing happens in your browser for better privacy.</p>
+            </details>
+            <details style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "#cfcfcf" }}>Why is compression speed different by file?</summary>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#7e7e7e" }}>
+                Speed depends on file size, format complexity and your device performance.
+              </p>
+            </details>
+          </div>
+        </section>
+
         <div style={{ textAlign: "center", marginTop: 64, fontSize: 12, color: "#333" }}>All processing happens in your browser - files never leave your device</div>
       </div>
 
